@@ -12,21 +12,22 @@ This section guides you to install Freestone Kubeflow.
 Prerequisites
 =============
 
-Adhere to the following requirements before deploying Freestone Kubeflow package on Tanzu Kubernetes Grid Service (TKGS) clusters.
+Adhere to the following requirements before deploying Freestone Kubeflow package on Tanzu Kubernetes Grid Service (TKG) clusters.
 
-For the deployment on TKGS clusters, Freestone Kubeflow is installed on a Tanzu Kubernetes Cluster (TKC). So before the deployment of Freestone Kubeflow, you need to get vSphere and TKC ready.
+For the deployment on TKG clusters, Freestone Kubeflow is installed on a Tanzu Kubernetes Cluster (TKC). So before the deployment of Freestone Kubeflow, you need to get vSphere and TKC ready.
 
 - For a greenfield deployment (no vSphere with Tanzu deployed on servers yet), you need to deploy vSphere with Tanzu first. Please refer to VMware official document `vSphere with Tanzu Configuration and Management <https://docs.vmware.com/en/VMware-vSphere/7.0/vmware-vsphere-with-tanzu/GUID-152BE7D2-E227-4DAA-B527-557B564D9718.html>`__.
 
-- To provison TKGS clusters with the proper vSphere with Tanzu installation and configuration, see `Workflow for Provisioning Tanzu Kubernetes Clusters Using the TKGS v1alpha2 API <https://docs.vmware.com/en/VMware-vSphere/7.0/vmware-vsphere-with-tanzu/GUID-3040E41B-8A54-4D23-8796-A123E7CAE3BA.html>`__.
+- If you're running vSphere 7.x, to provision TKC with the proper vSphere with Tanzu installation and configuration, see `Workflow for Provisioning Tanzu Kubernetes Clusters Using the TKGS v1alpha2 API <https://docs.vmware.com/en/VMware-vSphere/7.0/vmware-vsphere-with-tanzu/GUID-3040E41B-8A54-4D23-8796-A123E7CAE3BA.html>`__.
+- If you're running vSphere 8.x, to provision TKC with the proper vSphere with Tanzu installation and configuration, see `Workflow for Provisioning TKG 2 Clusters on Supervisor Using Kubectl <https://docs.vmware.com/en/VMware-vSphere/8.0/vsphere-with-tanzu-tkg/GUID-918803BD-123E-43A5-9843-250F3E20E6F2.html>`__.
 
-- To use GPU resources on Freestone Kubeflow, setup vGPU Tanzu Kubernetes Grid (TKG) with document `Deploy AI/ML Workloads on Tanzu Kubernetes Clusters <https://docs.vmware.com/en/VMware-vSphere/7.0/vmware-vsphere-with-tanzu/GUID-2B4CAE86-BAF4-4411-ABB1-D5F2E9EF0A3D.html>`__.
+- To use GPU resources on Freestone Kubeflow, setup vGPU Tanzu Kubernetes Grid (TKG) by following `Deploy AI/ML Workloads on Tanzu Kubernetes Clusters <https://docs.vmware.com/en/VMware-vSphere/7.0/vmware-vsphere-with-tanzu/GUID-2B4CAE86-BAF4-4411-ABB1-D5F2E9EF0A3D.html>`__.
 
 - To connect to the cluster from your client host, see `Connect to a Tanzu Kubernetes Cluster as a vCenter Single Sign-On User <https://docs.vmware.com/en/VMware-vSphere/7.0/vmware-vsphere-with-tanzu/GUID-AA3CA6DC-D4EE-47C3-94D9-53D680E43B60.html>`__.
 
-- Install ``kctrl``, a kapp-controller's native CLI on your client host. It is used to install  Freestone Kubeflow Carvel Package. See `Installing kapp-controller CLI: kctrl <https://carvel.dev/kapp-controller/docs/v0.40.0/install/#installing-kapp-controller-cli-kctrl>`__.
+- Install ``kctrl``, a kapp-controller's native CLI on your client host. It is used to install Freestone Kubeflow Carvel Package. See `Installing kapp-controller CLI: kctrl <https://carvel.dev/kapp-controller/docs/v0.40.0/install/#installing-kapp-controller-cli-kctrl>`__.
 
-Deploy Freestone Kubeflow package on TKGS clusters
+Deploy Freestone Kubeflow package on TKG clusters
 ===========================================================
 
 Add package repository
@@ -34,12 +35,34 @@ Add package repository
 
 .. code-block:: shell
 
-	kubectl create ns carvel-kubeflow-namespace
-	kubectl config set-context --current --namespace=carvel-kubeflow-namespace
+	kubectl create ns carvel-kubeflow
+	kubectl config set-context --current --namespace=carvel-kubeflow
 
-	kctrl package repository add \
-	  --repository kubeflow-carvel-repo \
-	  --url projects.registry.vmware.com/kubeflow/kubeflow-carvel-repo:1.6.1
+	kctrl package repository add --repository kubeflow-carvel-repo --url projects.registry.vmware.com/kubeflow/kubeflow-carvel-repo:1.6.1
+
+If you get the error `kctrl: Error: the server could not find the requested resource (post packagerepositories.packaging.carvel.dev)`, this means the Carvel Custom Resource Definitions (CRD) have not been installed.
+You can do so by running:
+
+.. code-block:: shell
+
+    kubectl apply -f https://github.com/vmware-tanzu/carvel-kapp-controller/releases/latest/download/release.yml
+
+If kapp-controller fails to deploy, make sure the `PodSecurityPolicy <https://docs.vmware.com/en/VMware-vSphere/7.0/vmware-vsphere-with-tanzu/GUID-CD033D1D-BAD2-41C4-A46F-647A560BAEAB.html#GUID-CD033D1D-BAD2-41C4-A46F-647A560BAEAB>`__ is properly configured:
+
+.. code-block:: shell
+
+    kubectl create rolebinding psp:serviceaccounts --clusterrole=psp:vmware-system-restricted --group=system:serviceaccounts -n kapp-controller
+
+You can check kapp-controller deployment by running:
+
+.. code-block:: shell
+
+    kubectl get deployment.apps/kapp-controller -n kapp-controller
+    NAME              READY   UP-TO-DATE   AVAILABLE   AGE
+    kapp-controller   0/1     0            0           2m11s
+
+When `READY` shows `1/1`, kapp-controller is running successfully and you can add the package repository again.
+
 
 Create ``config.yaml`` file
 ---------------------------
@@ -51,14 +74,10 @@ Create a ``config.yaml`` file which is used in Freestone Kubeflow installation l
 
 .. code-block:: shell
 
-    cat > config.yaml << 'EOF'
-
+    cat <<EOF > config.yaml
     service_type: "LoadBalancer"
-
     IP_address: ""
-
     CD_REGISTRATION_FLOW: True
-
     EOF
 
 Install Freestone Kubeflow package
@@ -78,12 +97,19 @@ This takes a few minutes, so please wait patiently. You see a "Succeeded" messag
 
     .. image:: ../_static/install-tkgs-deploySucceed.png
 
+To follow the installation process, you can use:
+
+.. code-block:: shell
+
+    kctrl package installed status -i kubeflow
+
+
 Access Freestone Kubeflow
 ----------------------------------
 
 Now, access the deployed Freestone Kubeflow in browser and start using it.
 
-To access Freestone Kubeflow, you need to get the IP address. There are three options.
+To access Freestone Kubeflow, you need to get the IP address of the service. There are three options.
 
 - When you set ``service_type`` to ``LoadBalancer``, run the following command and visit ``EXTERNAL-IP`` of ``istio-ingressgateway``.
 
@@ -192,7 +218,7 @@ To uninstall the Freestone Kubeflow package:
 
       kctrl package installed delete --package-install kubeflow
 
-When deleting the vSphere Enterprise Kubeflow package, some resources may get stuck at ``deleting`` status. To solve this problem:
+When deleting the Freestone Kubeflow package, some resources may get stuck in the ``deleting`` phase. To solve this problem:
 
    .. code-block:: shell
 
@@ -203,8 +229,7 @@ When deleting the vSphere Enterprise Kubeflow package, some resources may get st
 Reconciliation issue
 --------------------
 
-Kapp-controller keeps reconciliating Freestone Kubeflow, which prevents you from editing a Freestone Kubeflow resource. In this case, you may pause and then trigger the reconciliation of Freestone Kubeflow to solve this issue.
-
+Kapp-controller keeps reconciling Freestone Kubeflow, which prevents you from editing a Freestone Kubeflow resource. In this case, you may pause and then trigger the reconciliation of Freestone Kubeflow to solve this issue.
 
 - To pause the reconciliation of a package installation:
 
